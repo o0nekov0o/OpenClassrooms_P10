@@ -17,13 +17,18 @@ from django.contrib import admin
 from django.urls import path
 
 from django.urls import include
-from django.shortcuts import redirect
-from support.views import ProjectViewSet
 from rest_framework.routers import DefaultRouter
+from support.views import UserViewSet, ProjectViewSet, ContributorViewSet, IssueViewSet, CommentViewSet
 
 router = DefaultRouter()
-router.register(r'projects', ProjectViewSet, basename='project')
+router.routes[2].mapping['post'] = 'partial_update'
+router.register(r'users', UserViewSet, basename='user')
 router.register(r'api-auth', ProjectViewSet, basename='project')
+router.register(r'projects', ProjectViewSet, basename='project')
+router.register(r'contributors', ContributorViewSet, basename='contributor')
+router.register(r'issues', IssueViewSet, basename='issue')
+router.register(r'comments', CommentViewSet, basename='comment')
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),

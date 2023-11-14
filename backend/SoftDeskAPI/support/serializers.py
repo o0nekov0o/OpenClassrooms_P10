@@ -1,32 +1,35 @@
 from rest_framework import serializers
 from .models import User, Project, Contributor, Issue, Comment
 
+url = serializers.HyperlinkedIdentityField(view_name="campaigns:promotion-detail", read_only=True)
+
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        exclude = []
+        fields = ['id', 'username', 'password', 'email', 'age', 'can_be_shared', 'can_be_contacted', 'url']
 
 
 class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
-        exclude = []
+        fields = ['id', 'author', 'time_created', 'title', 'description', 'type', 'url']
 
 
-class ContributorViewset(serializers.ModelSerializer):
+class ContributorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Contributor
-        exclude = []
+        fields = ['id', 'user', 'project', 'url']
 
 
-class IssueViewset(serializers.ModelSerializer):
+class IssueSerializer(serializers.ModelSerializer):
     class Meta:
         model = Issue
-        exclude = []
+        fields = ['id', 'project', 'description', 'author', 'time_created',
+                  'affected_to', 'status', 'priority', 'tag', 'url']
 
 
-class CommentViewset(serializers.ModelSerializer):
+class CommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
-        exclude = []
+        fields = ['id', 'issue', 'author', 'description', 'time_created', 'url']

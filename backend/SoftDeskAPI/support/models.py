@@ -6,14 +6,14 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 
 # Create your models here.
 class User(AbstractUser):
-    age = models.IntegerField(validators=[MinValueValidator(15), MaxValueValidator(99)], null=True)
-    can_be_contacted = models.BooleanField(null=True)
-    can_be_shared = models.BooleanField(null=True)
+    age = models.IntegerField(validators=[MinValueValidator(15), MaxValueValidator(99)])
+    can_be_contacted = models.BooleanField(default=False, blank=False, null=False)
+    can_be_shared = models.BooleanField(default=False, blank=False, null=False)
+    REQUIRED_FIELDS = ['age']
 
 
 class Project(models.Model):
     author = models.ForeignKey(to=User, on_delete=models.CASCADE)
-    # contributors = models.ManyToManyField(to=User, )
     time_created = models.DateTimeField(auto_now_add=True)
     title = models.CharField(max_length=128)
     description = models.TextField(max_length=2048, blank=True)
@@ -70,6 +70,6 @@ class Comment(models.Model):
         editable=False
     )
     issue = models.ForeignKey(to=Issue, on_delete=models.CASCADE)
-    author = models.ForeignKey(to=Contributor, on_delete=models.CASCADE)
+    author = models.ForeignKey(to=User, on_delete=models.CASCADE)
     description = models.CharField(max_length=8192, blank=True)
     time_created = models.DateTimeField(auto_now_add=True)
