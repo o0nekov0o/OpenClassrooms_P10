@@ -58,26 +58,29 @@ class IsAuthorOrContributorFilter(filters.BaseFilterBackend):
     """
     The request is authenticated as a user, or is a read-only request.
     """
+
     def filter_queryset(self, request, queryset, view):
         # checking for confirmation of project object by searching contributor attribute
+        print(queryset[0].author)
         if queryset and hasattr(queryset[0], 'contributor_set'):
-            return queryset.filter(Q(author=request.user.id) |
-                                   Q(contributor__user=request.user.id))
+            return queryset.filter(Q(author=request.user) |
+                                   Q(contributor__user=request.user))
         # checking for confirmation of issue object by searching project attribute
         # not including affected_to user because the affected_to user has to be a contributor in all ways
         if queryset and hasattr(queryset[0], 'project'):
-            return queryset.filter(Q(author=request.user.id) |
-                                   Q(project__contributor__user=request.user.id))
+            return queryset.filter(Q(author=request.user) |
+                                   Q(project__contributor__user=request.user))
         # checking for confirmation of comment object by searching issue attribute
         if queryset and hasattr(queryset[0], 'issue'):
-            return queryset.filter(Q(author=request.user.id) |
-                                   Q(issue__project__contributor__user=request.user.id))
+            return queryset.filter(Q(author=request.user) |
+                                   Q(issue__project__contributor__user=request.user))
 
 
 class IsAuthorOrContributor(BasePermission):
     """
     The request is authenticated as a user, or is a read-only request.
     """
+
     def has_object_permission(self, request, view, obj):
         if request.user == obj.author and request.method in ['GET', 'PUT', 'PATCH', 'DELETE', 'POST']:
             return True
@@ -106,14 +109,34 @@ class ProjectViewSet(viewsets.ModelViewSet):
     queryset = Project.objects.all().distinct()
     filter_backends = [IsAuthorOrContributorFilter]
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=self.request.data)
+        serializer.is_valid(raise_exception=True)
+        new_project = serializer.validated_data
+        if new_project:
+            Project.objects.create(author=new_project['author'], title=new_project['author'],
+                                   description=new_project['description'], type=new_project['type'])
+            Contributor.objects.create(user=new_project['author'], project=Project.objects.last())
+            return Response(status=status.HTTP_201_CREATED)
+        else:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
 
 class ContributorViewSet(viewsets.ModelViewSet):
     """
     A viewset for viewing and editing contributor instances.
     """
-    permission_classes = [IsSuperUser]
+    permission_classes = [IsAuthenticated]
     serializer_class = ContributorSerializer
     queryset = Contributor.objects.all().distinct()
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.project.author == request.user:
+            instance.__class__.objects.get(user=instance.user, project=instance.project).delete()
+            return Response(status=status.HTTP_200_OK)
+        else:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
@@ -122,23 +145,23 @@ class ContributorViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
         project = serializer.validated_data['project']
-        if not instance.__class__.objects.filter(user=user, project=project):
+        if not instance.__class__.objects.filter(user=user, project=project) \
+                and instance.project.author == request.user and project.author == request.user:
             self.perform_update(serializer)
-            return Response(status=status.HTTP_201_CREATED)
+            return Response(status=status.HTTP_202_ACCEPTED)
         else:
-            return Response(status=status.HTTP_409_CONFLICT)
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
     def create(self, request, *args, **kwargs):
-        # Override create method to prevent duplicate object creation
-        serializer = ContributorSerializer(data=self.request.data)
+        serializer = self.get_serializer(data=self.request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
         project = serializer.validated_data['project']
-        if not Contributor.objects.filter(user=user, project=project):
+        if not Contributor.objects.filter(user=user, project=project) and project.author == request.user:
             Contributor.objects.create(user=user, project=project)
             return Response(status=status.HTTP_201_CREATED)
         else:
-            return Response(status=status.HTTP_409_CONFLICT)
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
 
 class IssueViewSet(viewsets.ModelViewSet):
