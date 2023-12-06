@@ -1,5 +1,5 @@
 
-# Créez une API sécurisée RESTful en utilisant Django REST
+# Créez une API sécurisée RESTful en utilisant Django REST Framework (Projet No.10)
 
 Dans ce projet, l'objectif est de se consacrer à la création de la partie backend d'un site web, à travers l'élaboration d'une API sécurisée qu'il nous est demandé de concevoir par le biais de l'utilisation de l'application Python Django Rest Framework. Pour se faire, les premières étapes d'installation de l'application en question se déroulent, pour ensuite laisser place aux étapes de configuration dans un second temps, afin que l'on puisse aboutir à la mise en place pour terminer. Ci-dessous les étapes permettant d'accéder à cette mise en place.
 
