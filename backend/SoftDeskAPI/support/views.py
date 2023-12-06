@@ -255,9 +255,9 @@ class IssueViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=self.request.data)
         serializer.is_valid(raise_exception=True)
         new_issue = serializer.validated_data
-        project, author, description, affected_to, statut, priority, tag = \
-            new_issue['project'], new_issue['author'], new_issue['description'], \
-            new_issue['affected_to'], new_issue['status'], new_issue['priority'], new_issue['tag']
+        project, description, affected_to, statut, priority, tag = \
+            new_issue['project'], new_issue['description'], new_issue['affected_to'], \
+            new_issue['status'], new_issue['priority'], new_issue['tag']
         if Contributor.objects.filter(user=request.user, project=new_issue['project']):
             Issue.objects.create(project=project, author=request.user, description=description,
                                  affected_to=affected_to, status=statut, priority=priority, tag=tag)
