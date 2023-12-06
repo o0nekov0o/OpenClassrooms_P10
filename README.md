@@ -37,7 +37,7 @@ Enfin, pour installer les paquets requis, rentrez ensuite le code ci-dessous :
 #### Troisième étape : utilisation
 Toujours depuis l'invite de commandes, rentrez enfin les deux commandes suivantes :
 ```bash
-  cd LITReview
+  cd backend/SoftDeskAPI
   python manage.py runserver
 ```
 Une fois le serveur démarré, il ne vous restera plus qu'à cliquer sur le rien renvoyé par le terminal afin d'accéder au site et utiliser l'application Web qui a été développée.
