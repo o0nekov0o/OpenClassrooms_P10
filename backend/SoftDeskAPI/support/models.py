@@ -9,7 +9,7 @@ class User(AbstractUser):
     age = models.IntegerField(validators=[MinValueValidator(15), MaxValueValidator(99)])
     can_be_contacted = models.BooleanField(default=False, blank=False, null=False)
     can_be_shared = models.BooleanField(default=False, blank=False, null=False)
-    REQUIRED_FIELDS = ['age']
+    REQUIRED_FIELDS = ['email', 'age']
 
 
 class Project(models.Model):

@@ -1,7 +1,7 @@
 from django.db.models import Q
 from rest_framework.response import Response
 from rest_framework import viewsets, filters, status
-from django.core.exceptions import MultipleObjectsReturned
+from django.contrib.auth.hashers import make_password
 from rest_framework.permissions import IsAuthenticated, BasePermission
 
 from .models import User, Project, Contributor, Issue, Comment
@@ -38,7 +38,7 @@ class IsAuthenticatedOrSignup(BasePermission):
         return False
 
     def has_object_permission(self, request, view, obj):
-        if request.user.is_authenticated and request.user.id == obj.id:
+        if request.user.is_authenticated and request.user.pk == obj.pk:
             return True
         if not request.user.is_authenticated and not request.user == obj.username:
             return False
@@ -51,7 +51,42 @@ class UserViewSet(viewsets.ModelViewSet):
     """
     permission_classes = [IsSuperUser | IsAuthenticatedOrSignup]
     serializer_class = UserSerializer
-    queryset = User.objects.all()
+    queryset = User.objects.order_by('-pk').distinct()
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.author == request.user:
+            instance.__class__.objects.get(pk=instance.pk).delete()
+            return Response(status=status.HTTP_200_OK)
+        else:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        if instance.username == request.user:
+            password = serializer.validated_data['password']
+            serializer.validated_data['password'] = make_password(password)
+            self.perform_update(serializer)
+            return Response(status=status.HTTP_202_ACCEPTED)
+        else:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=self.request.data)
+        serializer.is_valid(raise_exception=True)
+        new_user = serializer.validated_data
+        username, password, email, age, can_be_shared, can_be_contacted = \
+            new_user['username'], new_user['password'], new_user['email'], \
+            new_user['age'], new_user['can_be_shared'], new_user['can_be_contacted']
+        if not User.objects.filter(Q(username=username) | Q(email=email)):
+            User.objects.create(username=username, password=make_password(password), email=email, age=age,
+                                can_be_shared=can_be_shared, can_be_contacted=can_be_contacted)
+            return Response(status=status.HTTP_201_CREATED)
+        else:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
 
 class IsAuthorOrContributorFilter(filters.BaseFilterBackend):
@@ -61,7 +96,6 @@ class IsAuthorOrContributorFilter(filters.BaseFilterBackend):
 
     def filter_queryset(self, request, queryset, view):
         # checking for confirmation of project object by searching contributor attribute
-        print(queryset[0].author)
         if queryset and hasattr(queryset[0], 'contributor_set'):
             return queryset.filter(Q(author=request.user) |
                                    Q(contributor__user=request.user))
@@ -88,9 +122,10 @@ class IsAuthorOrContributor(BasePermission):
         if obj and hasattr(obj, 'contributor_set'):
             project_contributor = obj.contributor_set.get(user=request.user, project=obj).user
         if obj and hasattr(obj, 'project'):
-            issue_contributor = obj.project.contributor_set.get(user=request.user, project=obj).user
+            issue_contributor = obj.project.contributor_set.get(user=request.user, project=obj.project).user
         if obj and hasattr(obj, 'issue'):
-            comment_contributor = obj.issue.project.contributor_set.get(user=request.user, project=obj).user
+            comment_contributor = obj.issue.project.contributor_set. \
+                get(user=request.user, project=obj.issue.project).user
         if request.user in [project_contributor, issue_contributor, comment_contributor] \
                 and request.method in ['GET', 'POST']:
             return True
@@ -106,17 +141,40 @@ class ProjectViewSet(viewsets.ModelViewSet):
     """
     permission_classes = [IsSuperUser | IsAuthenticated & IsAuthorOrContributor]
     serializer_class = ProjectSerializer
-    queryset = Project.objects.all().distinct()
+    queryset = Project.objects.order_by('-time_created').distinct()
     filter_backends = [IsAuthorOrContributorFilter]
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.author == request.user:
+            instance.__class__.objects.get(pk=instance.pk).delete()
+            return Response(status=status.HTTP_200_OK)
+        else:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        if instance.author == request.user:
+            serializer.validated_data.pop('author')
+            self.perform_update(serializer)
+            return Response(status=status.HTTP_202_ACCEPTED)
+        else:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=self.request.data)
         serializer.is_valid(raise_exception=True)
         new_project = serializer.validated_data
-        if new_project:
-            Project.objects.create(author=new_project['author'], title=new_project['author'],
+        admin = User.objects.get(pk=1)
+        if request.user.is_authenticated:
+            Project.objects.create(author=request.user, title=new_project['title'],
                                    description=new_project['description'], type=new_project['type'])
-            Contributor.objects.create(user=new_project['author'], project=Project.objects.last())
+            Contributor.objects.create(user=request.user, project=Project.objects.last())
+            if not request.user == admin:
+                Contributor.objects.create(user=admin, project=Project.objects.last())
             return Response(status=status.HTTP_201_CREATED)
         else:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
@@ -128,12 +186,12 @@ class ContributorViewSet(viewsets.ModelViewSet):
     """
     permission_classes = [IsAuthenticated]
     serializer_class = ContributorSerializer
-    queryset = Contributor.objects.all().distinct()
+    queryset = Contributor.objects.order_by('-pk').distinct()
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         if instance.project.author == request.user:
-            instance.__class__.objects.get(user=instance.user, project=instance.project).delete()
+            instance.__class__.objects.get(pk=instance.pk).delete()
             return Response(status=status.HTTP_200_OK)
         else:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
@@ -170,8 +228,42 @@ class IssueViewSet(viewsets.ModelViewSet):
     """
     permission_classes = [IsSuperUser | IsAuthenticated & IsAuthorOrContributor]
     serializer_class = IssueSerializer
-    queryset = Issue.objects.all().distinct()
+    queryset = Issue.objects.order_by('-time_created').distinct()
     filter_backends = [IsAuthorOrContributorFilter]
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.author == request.user:
+            instance.__class__.objects.get(pk=instance.pk).delete()
+            return Response(status=status.HTTP_200_OK)
+        else:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        if instance.author == request.user:
+            serializer.validated_data.pop('author')
+            self.perform_update(serializer)
+            return Response(status=status.HTTP_202_ACCEPTED)
+        else:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=self.request.data)
+        serializer.is_valid(raise_exception=True)
+        new_issue = serializer.validated_data
+        project, author, description, affected_to, statut, priority, tag = \
+            new_issue['project'], new_issue['author'], new_issue['description'], \
+            new_issue['affected_to'], new_issue['status'], new_issue['priority'], new_issue['tag']
+        if Contributor.objects.filter(user=request.user, project=new_issue['project']):
+            Issue.objects.create(project=project, author=request.user, description=description,
+                                 affected_to=affected_to, status=statut, priority=priority, tag=tag)
+            return Response(status=status.HTTP_201_CREATED)
+        else:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
 
 class CommentViewSet(viewsets.ModelViewSet):
@@ -180,5 +272,36 @@ class CommentViewSet(viewsets.ModelViewSet):
     """
     permission_classes = [IsSuperUser | IsAuthenticated & IsAuthorOrContributor]
     serializer_class = CommentSerializer
-    queryset = Comment.objects.all().distinct()
+    queryset = Comment.objects.order_by('-time_created').distinct()
     filter_backends = [IsAuthorOrContributorFilter]
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.author == request.user:
+            instance.__class__.objects.get(pk=instance.pk).delete()
+            return Response(status=status.HTTP_200_OK)
+        else:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        if instance.author == request.user:
+            serializer.validated_data.pop('author')
+            self.perform_update(serializer)
+            return Response(status=status.HTTP_202_ACCEPTED)
+        else:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=self.request.data)
+        serializer.is_valid(raise_exception=True)
+        new_comment = serializer.validated_data
+        if Contributor.objects.filter(user=request.user, project=new_comment['issue'].project):
+            Comment.objects.create(issue=new_comment['issue'], author=request.user,
+                                   description=new_comment['description'])
+            return Response(status=status.HTTP_201_CREATED)
+        else:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)

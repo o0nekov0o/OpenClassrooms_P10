@@ -15,15 +15,19 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
-
 from django.urls import include
 from rest_framework.routers import DefaultRouter
+from rest_framework.authtoken.views import obtain_auth_token
 from support.views import UserViewSet, ProjectViewSet, ContributorViewSet, IssueViewSet, CommentViewSet
+
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
 
 router = DefaultRouter()
 router.routes[2].mapping['post'] = 'partial_update'
 router.register(r'users', UserViewSet, basename='user')
-router.register(r'api-auth', ProjectViewSet, basename='project')
 router.register(r'projects', ProjectViewSet, basename='project')
 router.register(r'contributors', ContributorViewSet, basename='contributor')
 router.register(r'issues', IssueViewSet, basename='issue')
@@ -32,6 +36,8 @@ router.register(r'comments', CommentViewSet, basename='comment')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api-auth/', include('rest_framework.urls')),
+    path('api-auth/', obtain_auth_token),
     path('', include(router.urls)),
+    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]

@@ -25,7 +25,7 @@ class ContributorSerializer(serializers.ModelSerializer):
 class IssueSerializer(serializers.ModelSerializer):
     class Meta:
         model = Issue
-        fields = ['id', 'project', 'description', 'author', 'time_created',
+        fields = ['id', 'project', 'author', 'description', 'time_created',
                   'affected_to', 'status', 'priority', 'tag', 'url']
 
 
